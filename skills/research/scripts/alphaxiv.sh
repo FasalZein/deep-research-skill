@@ -120,12 +120,24 @@ cmd_search() {
     fi
 
     # Delegate to exa with research paper category
-    local exa_script="/Users/tothemoon/.claude/skills/exa/scripts/exa.sh"
+    # Auto-detect exa script relative to this script's location
+    local script_dir
+    script_dir="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+    local skills_dir
+    skills_dir="$(dirname "$(dirname "$script_dir")")"
+    local exa_script="$skills_dir/exa/scripts/exa.sh"
+
+    # Fallback: try home directory convention
+    if [[ ! -x "$exa_script" ]]; then
+        exa_script="${HOME}/.claude/skills/exa/scripts/exa.sh"
+    fi
 
     if [[ -x "$exa_script" ]]; then
         "$exa_script" search "$query" "$num_results" "research paper"
     else
-        echo "ERROR: Exa script not found at $exa_script" >&2
+        echo "ERROR: Exa script not found. Searched:" >&2
+        echo "  - $skills_dir/exa/scripts/exa.sh" >&2
+        echo "  - ${HOME}/.claude/skills/exa/scripts/exa.sh" >&2
         exit 1
     fi
 }

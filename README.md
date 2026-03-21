@@ -2,7 +2,18 @@
 
 Deep research on any topic — fully autonomous. Combines [Exa](https://exa.ai) semantic search, [Firecrawl](https://firecrawl.dev) web scraping, and [AlphaXiv](https://alphaxiv.org) paper analysis into a single research workflow that produces structured reports with citations.
 
+Uses **subagent delegation** to keep the main context clean — all search/scrape output stays in subagent contexts, only compact findings return to the main model for synthesis.
+
 Built on top of the excellent [superlight-exa-skill](https://github.com/edxeth/superlight-exa-skill) and [superlight-firecrawl-skill](https://github.com/edxeth/superlight-firecrawl-skill) by [@edxeth](https://github.com/edxeth).
+
+## Supported Harnesses
+
+| Harness | Subagent Tool | Status |
+|---------|--------------|--------|
+| **Claude Code** | `Agent` tool (built-in) | Full support |
+| **Pi Agent** | `subagent` tool (via pi-interactive-subagents) | Full support |
+| **OpenCode** | `Task` tool (built-in) | Full support |
+| **Others** | Fallback: direct execution with reduced scope | Works, no context isolation |
 
 ## Install
 
@@ -17,9 +28,9 @@ npx skills add edxeth/superlight-firecrawl-skill
 npx skills add FasalZein/autonomous-research-skill
 ```
 
-That's it. After restarting your Claude Code session, the `/research` command is available.
+After restarting your session, the `/research` command is available.
 
-### Alternative: Manual Install
+### Manual Install
 
 If you prefer to install manually (or use a different coding harness):
 
@@ -32,16 +43,14 @@ git clone https://github.com/edxeth/superlight-exa-skill.git ~/.claude/skills/ex
 git clone https://github.com/edxeth/superlight-firecrawl-skill.git ~/.claude/skills/firecrawl
 ```
 
-For other harnesses (Cursor, Windsurf, Codex, etc.), clone into `~/.agents/skills/` instead.
-
 ## Environment Variables
 
 You need API keys for Exa and Firecrawl. AlphaXiv is free and requires no key.
 
 ```bash
 # Add to your shell profile (~/.zshrc, ~/.bashrc, etc.)
-export EXA_API_KEY="your-key"          # Get one at: https://dashboard.exa.ai/api-keys
-export FIRECRAWL_API_KEY="fc-your-key" # Get one at: https://firecrawl.dev
+export EXA_API_KEY="your-key"          # Get at: https://dashboard.exa.ai/api-keys
+export FIRECRAWL_API_KEY="fc-your-key" # Get at: https://firecrawl.dev
 
 # Both support comma-separated keys for automatic rotation on rate limits:
 export EXA_API_KEY="key1,key2,key3"
@@ -59,139 +68,92 @@ Examples:
 /research the current state of Elliott Wave analysis algorithms
 /research what's the landscape of AI code review tools in 2026
 /research deep dive into WebSocket vs SSE for real-time data streaming
-/research literature review on neural network approaches to time series forecasting
 /research how does Raft consensus work
 ```
 
-The skill runs fully autonomously — no stopping to ask questions mid-research. It searches, reads sources, follows trails, and delivers a complete report.
+The skill runs fully autonomously — no stopping to ask questions mid-research.
 
 ## How It Works
 
-The research skill orchestrates a 5-phase pipeline:
+### Architecture: Subagent-Delegated Research
 
-### Phase 1: Scope
-Defines the core question, 3-5 sub-questions, what source types are needed (papers, code, news, docs), and target depth (quick scan vs deep dive).
-
-### Phase 2: Discover
-Casts a wide net using multiple parallel search strategies:
-
-| Strategy | Tool | Best For |
-|----------|------|----------|
-| Semantic search | `exa search` | General discovery |
-| Category-filtered | `exa search` + category | Papers, GitHub, news, companies |
-| AI answer | `exa answer` | Quick factual overview |
-| Web search + scrape | `firecrawl search` | Content-rich results |
-| Code search | `exa code` | Implementations, repos |
-
-Runs at least 3 strategies per sub-question to avoid tunnel vision.
-
-### Phase 3: Deep Read
-Reads the best sources in full — this is where shallow research becomes deep:
-
-| Source Type | Tool | Notes |
-|-------------|------|-------|
-| Web pages / articles | `firecrawl scrape` | Converts to clean markdown |
-| Arxiv papers | `alphaxiv.sh overview` | AI-structured summaries (no API key needed) |
-| Related sources | `exa similar` | **Mandatory** — follows the trail from the best source found |
-| Structured data | `firecrawl extract` | Returns JSON from pages |
-| Site maps | `firecrawl map` | Discovers all URLs before selective reading |
-
-### Phase 4: Synthesize
-Compiles findings into a structured report (not copy-paste — original synthesis):
+The main model never runs search or scraping tools directly. It scopes the research, spawns subagents equipped with the exa/firecrawl/alphaxiv tools to do the actual searching and reading, then synthesizes their compact findings into the final report.
 
 ```
-# Research: [Core Question]
-## TL;DR              → <100 words, direct, opinionated
-## Key Findings       → Per sub-question, inline citations [1], [2]
-## Landscape          → Comparison table
-## Contradictions     → Explicit disagreements between sources
-## Open Questions     → What's unclear or contested
-## Sources            → Numbered, authority-tagged, with descriptions
+Main Model (director — scopes, delegates, synthesizes)
+│
+├─ Phase 1: Scope (main model, no tools)
+│   Define core question, sub-questions, source types, depth
+│
+├─ Phase 2+3: Research subagents (parallel, tool-equipped)
+│   ├─ Subagent A → searches + scrapes sub-question 1 → returns compact findings
+│   ├─ Subagent B → searches + scrapes sub-question 2 → returns compact findings
+│   └─ Subagent C → searches + scrapes sub-question 3 → returns compact findings
+│   (all raw search/scrape output stays in subagent contexts — never enters main)
+│
+├─ Phase 4: Synthesize (main model — clean context, only compact findings)
+│
+└─ Phase 5: Verify claims (cross-check contradictions, recency, authority, gaps)
 ```
 
-### Phase 5: Verify
-Cross-checks claims before delivery:
-- **Contradiction check** — Sources that disagree are flagged
-- **Recency check** — Outdated sources are noted
-- **Authority check** — Each source tagged: `official-docs`, `peer-reviewed`, `industry`, `blog`, `forum`, `code`
-- **Gap check** — Missing answers stated explicitly
+**Why subagents?** A typical research session generates 75K+ characters of raw search results and scraped pages. Without subagents, this fills the main context window, leaving no room for quality synthesis. With subagents, the main model only sees ~2K characters of structured findings per sub-question.
 
-## Report Output
+### Tools Available to Subagents
+
+| Tool | Command | Best For |
+|------|---------|----------|
+| Exa search | `$EXA search "<query>" <n> [category]` | General discovery |
+| Exa answer | `$EXA answer "<question>"` | Quick factual overview |
+| Exa similar | `$EXA similar "<url>" <n>` | Trail-following from best source |
+| Exa code | `$EXA code "<query>"` | Code and implementations |
+| Firecrawl scrape | `$FIRECRAWL scrape "<url>"` | Full page content |
+| Firecrawl search | `$FIRECRAWL search "<query>" <n>` | Web search + scrape combo |
+| Firecrawl extract | `$FIRECRAWL extract "<url>" "<prompt>"` | Structured JSON extraction |
+| Firecrawl map | `$FIRECRAWL map "<url>" <n>` | URL discovery on docs sites |
+| AlphaXiv overview | `$ALPHAXIV overview "<paper-id>"` | Arxiv paper summaries |
+| AlphaXiv search | `$ALPHAXIV search "<query>" <n>` | Academic paper search |
+
+### Report Output
 
 Every report includes:
 
 | Section | Description |
 |---------|-------------|
-| **TL;DR** | <100 word executive summary, direct and opinionated |
-| **Key Findings** | Synthesized answers per sub-question with inline citations |
+| **TL;DR** | <100 word executive summary |
+| **Key Findings** | Per sub-question with inline citations `[1]`, `[2]` |
 | **Landscape / Comparison** | Table comparing approaches, tools, or methods |
 | **Contradictions & Disputes** | Explicit disagreements between sources (mandatory) |
 | **Open Questions** | What remains unclear or contested |
-| **Sources** | Numbered with authority tags and one-line descriptions |
+| **Sources** | Numbered, authority-tagged (`official-docs`, `peer-reviewed`, `industry`, `blog`, `code`) |
 
-Example source format:
-```
-[1] Title (URL) — [authority: peer-reviewed] — Key contribution from this source
-[2] Title (URL) — [authority: industry] — What this source added
-```
-
-## Architecture
+## File Structure
 
 ```
 autonomous-research-skill/
 └── skills/
     └── research/
-        ├── SKILL.md              # The research protocol (what the agent follows)
+        ├── SKILL.md              # Research protocol with subagent delegation
         └── scripts/
-            └── alphaxiv.sh       # AlphaXiv paper lookup (search + overview)
+            └── alphaxiv.sh       # AlphaXiv paper lookup (no API key needed)
 
 Dependencies (installed separately):
 ├── edxeth/superlight-exa-skill       # Exa semantic search
-│   └── scripts/exa.sh               # search, answer, similar, code, contents
+│   └── scripts/exa.sh
 └── edxeth/superlight-firecrawl-skill # Firecrawl web scraping
-    └── scripts/firecrawl.sh          # scrape, search, map, extract, crawl
+    └── scripts/firecrawl.sh
 ```
 
-## AlphaXiv Script
+## OS Compatibility
 
-The included `alphaxiv.sh` provides structured AI summaries of arxiv papers:
-
-```bash
-# Get a structured overview of a paper
-alphaxiv.sh overview 2301.12345
-alphaxiv.sh overview https://arxiv.org/abs/2301.12345
-
-# Search for research papers (delegates to Exa with "research paper" category)
-alphaxiv.sh search "transformer attention mechanisms" 5
-```
-
-Accepts arxiv URLs, alphaxiv URLs, or raw paper IDs. Falls back from overview to full text automatically. No API key required.
-
-## How It Was Built
-
-This skill was optimized using the **autoresearch methodology** (inspired by [Karpathy's autonomous experimentation loops](https://github.com/karpathy)):
-
-1. **Baseline** — Ran the skill 3x against diverse topics (Elliott Wave algorithms, AI code review tools, Raft consensus). Scored against binary evals.
-2. **Eval tightening** — Initial evals were too easy (100% baseline). Replaced with harder evals that caught real weaknesses.
-3. **Mutation** — Applied targeted changes to the skill prompt based on failure analysis.
-4. **Validation** — Ran 3 more times against different topics (WebSocket vs SSE, time series forecasting, Elliott Wave repeat). Scored 100% on harder evals.
-
-### 5 improvements from autoresearch:
-
-| # | Improvement | Why It Mattered |
-|---|-------------|-----------------|
-| 1 | Mandatory AlphaXiv for arxiv papers | Agents silently skipped it and used firecrawl instead |
-| 2 | Mandatory `exa similar` trail-following | Surfaces high-quality sources that search alone misses |
-| 3 | Source authority tags | Makes source quality immediately visible in the report |
-| 4 | Concise TL;DR (<100 words) | Long summaries are less useful; forces opinionated synthesis |
-| 5 | Mandatory contradictions section | Prevents summarization-as-research; forces critical analysis |
+All script paths use auto-detection with `~/.claude/skills/` fallback. Works on:
+- macOS
+- Linux
+- Windows (WSL)
 
 ## Related Skills
 
 - [superlight-exa-skill](https://github.com/edxeth/superlight-exa-skill) — Exa AI semantic web search (by [@edxeth](https://github.com/edxeth))
 - [superlight-firecrawl-skill](https://github.com/edxeth/superlight-firecrawl-skill) — Firecrawl web scraping and crawling (by [@edxeth](https://github.com/edxeth))
-- [agent-browser](https://github.com/vercel-labs/agent-browser) — Browser automation for AI agents (by Vercel Labs)
-- [skills](https://github.com/vercel-labs/skills) — Discover and install more skills (by Vercel Labs)
 
 ## License
 
