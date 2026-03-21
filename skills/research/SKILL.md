@@ -68,43 +68,70 @@ If auto-detect fails, fall back to the standard install location:
 
 ## Architecture: Subagent-Delegated Research
 
-The main model **never runs search or scraping tools directly**. Instead, it scopes the research, then delegates all tool-heavy work to subagents. Each subagent has its own context window — when it finishes, only its compact summary enters the main context. All raw search results and scraped page content stay in the subagent's context and are discarded.
-
-This keeps the main context clean for synthesis, regardless of how many sources are consulted.
+The main model is the **research director** — it scopes, refines, delegates, and synthesizes. It never runs search or scraping tools directly. All tool-heavy work runs in subagents, whose raw output stays in their own context and never enters the main model's window.
 
 ```
-Main Model (director — scopes, delegates, synthesizes)
+Main Model (director — refines query, delegates, synthesizes)
 │
-├─ Phase 1: Scope the research (main model, no tools needed)
+├─ Phase 1: Scope + refine (main model, no tools)
+│   └─ Turn vague requests into precise, search-ready questions
+│
+├─ Preflight: Resolve tool paths + verify scripts exist (main model, once)
 │
 ├─ Phase 2+3: Research subagents (parallel, tool-equipped)
-│   ├─ Subagent A → searches + scrapes sub-question 1 → returns findings
-│   ├─ Subagent B → searches + scrapes sub-question 2 → returns findings
-│   └─ Subagent C → searches + scrapes sub-question 3 → returns findings
+│   └─ 1 agent per sub-question (or 1 agent total if question is focused)
 │   (all raw tool output lives and dies in subagent contexts)
 │
-├─ Phase 4: Synthesize report (main model — works from compact findings only)
+├─ Phase 4: Synthesize report (main model — compact findings only)
 │
-└─ Phase 5: Verify claims (main model, or one verification subagent)
+└─ Phase 5: Verify claims (main model)
 ```
 
-### Spawning Research Subagents
+### How many subagents?
 
-Your harness determines how to spawn subagents. Use whichever tool your environment provides:
+Do NOT always split into 3. Match the question:
+
+- **Focused question** ("How does Raft consensus work?") → **1 subagent** is enough. One agent, multiple search strategies, comprehensive findings.
+- **Multi-angle question** ("What's the landscape of AI code review tools?") → **2-3 subagents**, one per independent angle (products, technical approaches, user reception).
+- **Broad survey** ("State of the art in RAG optimization") → **3-5 subagents**, each covering a distinct subtopic.
+
+The rule: **split only when sub-questions are truly independent** and would benefit from separate search strategies. If they'd all search the same thing, use one agent.
+
+### Preflight: Resolve Paths + Verify Tools
+
+Before spawning any subagent, the main model resolves tool paths **once** and verifies everything works. Pass the resolved absolute paths directly into subagent prompts — never make subagents discover paths themselves.
+
+```bash
+# Resolve paths (run once in main model)
+EXA="$(find ~/.claude/skills ~/.agents/skills -path "*/exa/scripts/exa.sh" 2>/dev/null | head -1)"
+FIRECRAWL="$(find ~/.claude/skills ~/.agents/skills -path "*/firecrawl/scripts/firecrawl.sh" 2>/dev/null | head -1)"
+ALPHAXIV="$(find ~/.claude/skills ~/.agents/skills -path "*/research/scripts/alphaxiv.sh" 2>/dev/null | head -1)"
+
+# Verify scripts exist and are executable
+test -x "$EXA" && echo "exa: OK" || echo "exa: MISSING"
+test -x "$FIRECRAWL" && echo "firecrawl: OK" || echo "firecrawl: MISSING"
+test -x "$ALPHAXIV" && echo "alphaxiv: OK" || echo "alphaxiv: MISSING"
+```
+
+If any script is missing, stop and tell the user what to install. Do NOT spawn subagents that will waste turns discovering broken paths.
+
+### Spawning Subagents
+
+Your harness determines the spawn method. Pass **resolved absolute paths** in the prompt:
 
 **Claude Code:**
 ```
-Agent(prompt="<research task>", model="sonnet")
+Agent(prompt="<research task with resolved paths>", model="sonnet")
 ```
 
 **Pi Agent:**
 ```
-subagent(name="research-1", task="<research task>", agent="scout", tools="read,bash")
+subagent(name="research-1", task="<research task with resolved paths>", tools="read,bash")
 ```
 
 **OpenCode:**
 ```
-Task(prompt="<research task>")
+Task(prompt="<research task with resolved paths>")
 ```
 
 **If your harness has no subagent tool:** Fall back to running tools directly in the main context. Use fewer searches (5 instead of 10 per strategy) and scrape only top 3-5 sources to manage context size.
@@ -113,84 +140,91 @@ Task(prompt="<research task>")
 
 ## Protocol
 
-### Phase 1: Scope the Research
+### Phase 1: Scope and Refine the Research
 
-The main model does this directly — it's cheap and requires no tools.
+The main model does this directly — no tools needed. This is the most important phase. A well-scoped question produces better research than more search queries ever will.
 
-1. **Core question** — One sentence. What exactly are we trying to answer?
-2. **Sub-questions** — 3-5 specific angles that together answer the core question
-3. **Source types needed** — Which matter for this topic:
+1. **Refine the user's request** — Users often ask broad or vague questions. Your job is to sharpen them into precise, search-ready queries BEFORE dispatching any subagent.
+   - Vague: "Research WebTransport" → Refined: "What is WebTransport's browser compatibility, who's using it in production, and how does it compare to WebSocket for real-time apps as of 2026?"
+   - Vague: "Look into RAG" → Refined: "What are the current best practices for chunking, embedding, and retrieval in RAG pipelines, and which approaches show the best recall/latency trade-offs?"
+   - Focused enough already: "How does Raft consensus handle leader election?" → Use as-is, single subagent.
+
+2. **Core question** — One sentence. What exactly are we trying to answer?
+
+3. **Sub-questions** — Only if the topic naturally decomposes into independent angles. A focused question needs 0 sub-questions (one subagent handles it). A broad survey needs 3-5.
+
+4. **Source types needed** — Which matter for this topic:
    - Academic papers (arxiv, research)
    - Technical docs / specs
    - Industry analysis / news
    - Code repositories / implementations
    - Expert blogs / practitioner knowledge
    - Company/product pages
-4. **Depth** — Quick scan (3-5 sources) or deep dive (10-20+ sources)
 
-Do NOT skip scoping. Bad research starts with vague questions.
+5. **Depth** — Quick scan (3-5 sources) or deep dive (10-20+ sources)
+
+6. **Decide agent count** — Based on how the question decomposes:
+   - 1 subagent: focused question, single angle
+   - 2-3 subagents: multi-angle question with independent sub-questions
+   - 4-5 subagents: broad survey requiring parallel exploration
+
+Do NOT skip scoping. Bad research starts with vague questions passed unrefined to subagents.
 
 ---
 
 ### Phase 2+3: Research via Subagents
 
-For each sub-question, spawn a subagent with this prompt template. Run them **in parallel** when possible.
+The main model crafts a **specific, narrow prompt** for each subagent. The subagent should never have to interpret what the user meant — that's the main model's job. Each prompt includes:
+- The exact question to answer (already refined by the main model)
+- Pre-resolved absolute paths to all tools
+- Which search strategies to use (not "pick from these 5" — tell it which 2-3 to run)
+- The return format
+
+Run subagents **in parallel** when there are multiple.
 
 **Subagent prompt template:**
 
+The main model fills in ALL bracketed fields before dispatching. Never pass variables like `$EXA` — always substitute the resolved absolute path.
+
 ```
-You are a research agent. Your job is to search for and extract information on ONE specific question, then return a compact summary. You have access to bash tools for web search and scraping.
+Research this specific question and return compact findings.
 
-QUESTION: [sub-question from Phase 1]
-SOURCE TYPES TO PRIORITIZE: [from Phase 1 scoping]
+QUESTION: [precise question crafted by main model — not the user's raw words]
 
-TOOLS AVAILABLE (use via bash):
-- Exa search:    $EXA search "<query>" <numResults> [category]
-                  Categories: company, research paper, news, pdf, github, tweet
-- Exa answer:    $EXA answer "<question>"
-- Exa similar:   $EXA similar "<url>" <numResults>
-- Exa code:      $EXA code "<query>"
-- Firecrawl:     $FIRECRAWL scrape "<url>"
-- Firecrawl:     $FIRECRAWL search "<query>" <limit>
-- Firecrawl:     $FIRECRAWL extract "<url>" "<what to extract>"
-- Firecrawl:     $FIRECRAWL map "<docs-url>" <limit>
-- AlphaXiv:      $ALPHAXIV overview "<paper-id-or-arxiv-url>"
-- AlphaXiv:      $ALPHAXIV search "<query>" <numResults>
+SEARCH STRATEGY (run in this order):
+1. [exact bash command with resolved path, e.g.: /home/user/.claude/skills/exa/scripts/exa.sh search "WebTransport browser support caniuse 2026" 5]
+2. [exact bash command, e.g.: /home/user/.claude/skills/exa/scripts/exa.sh answer "Which browsers support WebTransport as of 2026?"]
+3. [exact bash command, e.g.: /home/user/.claude/skills/firecrawl/scripts/firecrawl.sh search "WebTransport browser compatibility" 3]
 
-INSTRUCTIONS:
-1. Run at least 3 different search strategies (exa search, exa with category filter, firecrawl search, exa answer, exa code — pick what fits the question)
-2. From all results, pick the top 3-5 most relevant URLs
-3. Scrape/read those sources using firecrawl scrape (or alphaxiv for arxiv papers — NEVER scrape arxiv with firecrawl)
-4. After reading your best source, run: $EXA similar "<best-source-url>" 5 — to find related high-quality sources search may have missed
-5. Extract key claims, data points, and quotes WITH their source URLs
+DEEP READ: From search results, scrape the top 3 most relevant URLs:
+  [resolved firecrawl path] scrape "<url>"
+  For arxiv papers ONLY: [resolved alphaxiv path] overview "<paper-id>"
 
-RETURN FORMAT (this is all the main model will see — be thorough but compact):
----
-## Findings: [sub-question]
+TRAIL: After your best source, run:
+  [resolved exa path] similar "<best-url>" 5
 
+RETURN FORMAT (compact — this is all the parent model will see):
+## Findings: [question]
 ### Key Claims
-- [Claim 1] — source: [Title](URL)
-- [Claim 2] — source: [Title](URL)
-- [Claim 3] — source: [Title](URL)
-
-### Contradictions Found
-- [Source A says X, but Source B says Y]
-
-### Best Sources (ranked)
-1. [Title](URL) — [authority: official-docs|peer-reviewed|industry|blog|forum|code] — [why it's good]
-2. [Title](URL) — [authority] — [why it's good]
-3. [Title](URL) — [authority] — [why it's good]
-
+- [claim] — source: [Title](URL)
+### Contradictions
+- [if any]
+### Sources (ranked by authority)
+1. [Title](URL) — [authority tag] — [one line why]
 ### Gaps
-- [What you couldn't find or verify]
----
+- [what's missing]
 ```
 
-**Adjust the subagent prompt based on source type:**
-- For academic topics: emphasize `$ALPHAXIV search` and `$EXA search ... "research paper"`
-- For code/implementations: emphasize `$EXA code` and `$EXA search ... "github"`
-- For market/industry: emphasize `$FIRECRAWL search`, `$EXA search ... "company"`, `$EXA search ... "news"`
-- For docs/specs: use `$FIRECRAWL map` to discover pages, then `$FIRECRAWL scrape` selectively
+**The main model decides the search strategy per subagent.** Don't give subagents a menu of 10 tools — tell each one exactly which 2-3 commands to run based on the source types identified in Phase 1:
+
+| Source type needed | Commands to include in subagent prompt |
+|---|---|
+| Academic papers | `[exa] search "<query>" 5 "research paper"` + `[alphaxiv] search "<query>" 5` |
+| Code / implementations | `[exa] code "<query>"` + `[exa] search "<query>" 5 "github"` |
+| Industry / market | `[firecrawl] search "<query>" 5` + `[exa] search "<query>" 5 "company"` |
+| News / recent developments | `[exa] search "<query>" 5 "news"` + `[exa] answer "<question>"` |
+| Docs / specs | `[firecrawl] map "<docs-url>" 50` + `[firecrawl] scrape "<url>"` |
+| General / mixed | `[exa] search "<query>" 5` + `[firecrawl] search "<query>" 3` + `[exa] answer "<question>"` |
 
 ---
 
@@ -263,43 +297,46 @@ If gaps are critical, spawn one more targeted subagent to fill them.
 
 | Problem | Action |
 |---------|--------|
-| Subagent tool not available | Fall back to running tools directly. Use fewer searches to manage context. |
+| Preflight: script not found | Stop immediately. Tell user which skill to install (`npx skills add ...`). Do NOT spawn subagents. |
+| Preflight: API key missing | Stop immediately. Tell user which env var to set. Do NOT spawn subagents. |
+| Subagent: tool path fails | Subagent should report the error and return what it has. Do NOT spend turns probing paths — the preflight should have caught this. |
+| Subagent tool not available | Fall back to running tools directly. Use fewer searches (5 not 10) to manage context. |
 | Exa returns no results | Rephrase query. Try broader terms. Try without category filter. |
-| Firecrawl scrape fails | Try different URL format. Try the page's cached/archived version. Move on to next source. |
+| Firecrawl scrape fails | Try one alternate URL format. If that fails, move on. Do NOT retry more than once. |
 | AlphaXiv 404 | Try `/abs/` endpoint. If both fail, scrape the arxiv abstract page directly with firecrawl. |
 | Rate limited (429) | Scripts auto-retry with key rotation. If all keys exhausted, wait and continue. |
-| Topic too broad | Narrow the core question. Research one specific angle first, then expand. |
+| Topic too broad | Main model should have refined this in Phase 1. If subagent still gets broad results, narrow and re-query once. |
 | Topic too niche | Broaden search terms. Try adjacent topics. Use `similar` to find related content from any relevant source you find. |
 | Conflicting sources | Report the conflict explicitly. Note which sources are more authoritative and why. |
-| Subagent returns thin results | Spawn a follow-up subagent with a rephrased question or broader search terms. |
+| Subagent returns thin results | Spawn ONE follow-up subagent with a rephrased question. Do not retry the same query. |
 
 ---
 
 ## Examples
 
-### Example 1: Technical research
-**User:** "Research the current state of Elliott Wave analysis algorithms"
-- Scope: 3 sub-questions (academic approaches, code implementations, practitioner tools)
-- Subagent A: `$EXA search "Elliott Wave" "research paper"` + `$ALPHAXIV search` → academic findings
-- Subagent B: `$EXA code "Elliott Wave algorithm"` + `$FIRECRAWL scrape` top repos → implementation findings
-- Subagent C: `$EXA search "Elliott Wave trading software"` + `$FIRECRAWL search` → practitioner findings
-- Main model: Synthesize into landscape report comparing approaches
+### Example 1: Vague user request → refined research
+**User:** "how do we optimize our data pipeline it's slow"
+- **Main model refines:** "What are current best practices for optimizing data pipeline throughput and latency, including batch vs stream processing, partitioning strategies, and common bottlenecks?"
+- **Decides:** 2 subagents (architecture patterns vs tooling comparison)
+- **Subagent A prompt:** "What are the most effective architectural patterns for high-throughput data pipelines — batch vs micro-batch vs streaming, partitioning strategies, backpressure handling?" + commands: `[exa] search "data pipeline optimization throughput 2026" 5` + `[exa] search "batch vs streaming pipeline performance" 5 "research paper"`
+- **Subagent B prompt:** "Compare current data pipeline tools (Kafka, Flink, Spark, Pulsar) on throughput, latency, and operational complexity" + commands: `[firecrawl] search "data pipeline benchmark Kafka Flink Spark 2026" 5` + `[exa] search "stream processing framework comparison" 5`
+- Main model: Synthesize into actionable recommendations
 
-### Example 2: Market research
-**User:** "What's the landscape of AI code review tools?"
-- Scope: 3 sub-questions (products & pricing, technical approaches, user reception)
-- Subagent A: `$EXA search ... "company"` + `$FIRECRAWL extract` pricing → product findings
-- Subagent B: `$EXA search` technical blogs + `$FIRECRAWL scrape` → technical findings
-- Subagent C: `$EXA search ... "news"` + `$FIRECRAWL search` reviews → reception findings
-- Main model: Synthesize into comparison table + analysis
-
-### Example 3: How-does-it-work
-**User:** "How does Raft consensus work?"
-- Scope: 3 sub-questions (core algorithm, implementations, trade-offs vs alternatives)
-- Subagent A: `$ALPHAXIV overview "raft-paper-id"` + `$EXA answer` → core algorithm
-- Subagent B: `$EXA code "raft consensus"` + `$FIRECRAWL scrape` → implementations
-- Subagent C: `$EXA search "raft vs paxos vs pbft"` → comparisons
+### Example 2: Focused question → single subagent
+**User:** "How does Raft consensus handle leader election?"
+- **Main model:** Question is already precise. No refinement needed. Single angle.
+- **Decides:** 1 subagent
+- **Subagent prompt:** "How does the Raft consensus algorithm handle leader election, including election timeouts, term numbers, split vote resolution, and pre-vote protocol?" + commands: `[exa] search "Raft consensus leader election algorithm" 5` + `[alphaxiv] search "Raft consensus" 3` + `[exa] answer "How does Raft leader election work?"`
 - Main model: Synthesize into technical explanation
+
+### Example 3: Broad survey → multiple subagents
+**User:** "what's the deal with AI code review tools"
+- **Main model refines:** "What is the current landscape of AI-powered code review tools — which products exist, how do they technically work, and what do practitioners say about their effectiveness?"
+- **Decides:** 3 subagents (products, technical approaches, practitioner reception)
+- **Subagent A prompt:** "List the major AI code review tools available in 2026 with their pricing, key features, and supported languages" + commands: `[exa] search "AI code review tool" 5 "company"` + `[firecrawl] extract "<product-url>" "product name, pricing, features"`
+- **Subagent B prompt:** "What technical approaches do AI code review tools use — LLM-based analysis, static analysis integration, fine-tuned models, or hybrid?" + commands: `[exa] search "AI code review technical architecture LLM" 5` + `[firecrawl] search "how AI code review works" 3`
+- **Subagent C prompt:** "What do developers say about AI code review tools — adoption rates, accuracy, false positive rates, real user experiences?" + commands: `[exa] search "AI code review developer experience review" 5 "news"` + `[firecrawl] search "AI code review accuracy false positives" 3`
+- Main model: Synthesize into comparison table + analysis
 
 ---
 
