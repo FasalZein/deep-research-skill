@@ -52,6 +52,16 @@ export TINYFISH_API_KEY="key1,key2,key3"
 export FIRECRAWL_API_KEY="fc-key1,fc-key2"
 ```
 
+### Research Artifacts
+
+For multi-angle research (2+ subagents), each subagent writes its findings to a temp directory to keep the parent context clean. By default this uses `$TMPDIR` (per-user temp on macOS, `/tmp` on Linux). The path is printed at the end of each research run.
+
+To use a persistent location instead:
+
+```bash
+export RESEARCH_ARTIFACT_DIR="$HOME/research"
+```
+
 ## Usage
 
 ```text
@@ -131,7 +141,7 @@ Every report includes:
 autonomous-research-skill/
 └── skills/
     └── research/
-        ├── SKILL.md              # Research protocol with subagent delegation
+        ├── SKILL.md              # Complete research protocol
         └── scripts/
             └── alphaxiv.sh       # AlphaXiv paper lookup (no API key needed)
 

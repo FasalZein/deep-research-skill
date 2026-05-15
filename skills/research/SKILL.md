@@ -1,52 +1,22 @@
 ---
 name: research
-description: "Autonomous deep research director. Uses subagents by default, discovers sources with Exa, fetches/extracts with TinyFish, renders/crawls Markdown with Firecrawl, and uses AlphaXiv for papers."
+description: "Autonomous deep research on any topic. Combines Exa semantic search, TinyFish web fetch, Firecrawl Markdown scraping/crawling/extraction, and AlphaXiv paper analysis into structured cited reports. Use when: research this, find out about, what's the latest on, deep dive into, investigate, analyze the landscape of, compare approaches to, literature review, state of the art, how does X work. Produces a structured research report with citations."
 ---
 
 # Autonomous Research
 
-Original report name: **Autonomous Research**. Final report heading: `# Research: [Core Question]`.
+You are a research director. Refine the question, dispatch subagents, synthesize a cited report. Final heading: `# Research: [Core Question]`.
 
-Use this skill as a coordinator, not a monolith: refine the question, launch subagents, chain the right acquisition tools, preserve useful artifacts, then synthesize a cited report.
+**Use** for multi-source research, literature reviews, landscapes, technical comparisons, source-backed answers.
+**Skip** for single facts, one known URL, or library docs — use Exa, TinyFish, Firecrawl, or Context7 directly.
 
-Pi skill frontmatter does not support dependencies/chains. Supported fields are `name`, `description`, `license`, `compatibility`, `metadata`, `allowed-tools`, and `disable-model-invocation`; unknown fields are ignored. Put chaining rules in this body and verify tools at runtime.
+---
 
-If filing research, use `projects/<project>/research/` via `wiki research file|ingest ... --project <project>`. Use global `research/` only with `--global`. Never create `research/projects/<project>/...`.
+## 1. Preflight
 
-## Use / skip
-
-Use for deep research, literature reviews, market/product landscapes, technical comparisons, source-backed answers, or anything needing multiple sources.
-
-Skip for single facts, one known URL, or library docs. Use Exa, TinyFish/Firecrawl, or Context7 directly instead.
-
-## Tool chain
-
-| Stage | Prefer | Purpose | Notes |
-|---|---|---|---|
-| Search/discovery | Exa | Find authoritative sources and trails | Search only; snippets are leads, not evidence. Use `similar` after the best source. |
-| Fetch/extract content | TinyFish | Fetch pages, JS-rendered pages, batches up to 10 URLs | Default output is clean Markdown; good after search results. |
-| Markdown/crawl/map | Firecrawl | Convert known URLs/sites to Markdown, map docs, crawl sections | Use `scrape <url> markdown`; use `extract` only for structured JSON. |
-| Papers | AlphaXiv + Exa | Arxiv paper discovery/overview | Use for paper summaries, then fetch paper/abstract when claims matter. |
-
-Default chain: **Exa search → TinyFish fetch → Firecrawl Markdown/crawl when needed → Exa similar trail → synthesize**.
-
-### Chain patterns
-
-- **General web:** Exa search 5-10 → TinyFish fetch top 3-5 → Exa similar on best source → synthesize.
-- **Docs/specs:** Firecrawl map docs root → Firecrawl scrape selected pages as Markdown → TinyFish fetch if rendering is better.
-- **Market/product:** Exa company search → TinyFish broad search/fetch → Firecrawl extract pricing/features JSON only after URLs are known.
-- **News/current:** Exa news search → TinyFish search/fetch with current year → avoid relying on Exa answer except as overview.
-- **Academic:** Exa research-paper search → AlphaXiv overview for arXiv/AlphaXiv IDs only → TinyFish/Firecrawl fetch non-arXiv abstracts or paper pages.
-- **Code:** Exa code/GitHub search → fetch README/docs/releases with TinyFish or Firecrawl.
-
-Provider snippets, `answer` summaries, and subagent prose are never final evidence. Evidence comes from fetched/scraped source content and exact quotes.
-
-## Preflight
-
-Resolve paths once in the parent and pass absolute paths to subagents.
+Run once. Shell state does not persist between calls — save the printed paths as literal strings for all subsequent commands.
 
 ```bash
-# Seed from current skill dir when available, then try common install roots.
 EXA="${PI_SKILL_DIR:+$(dirname "$PI_SKILL_DIR")/exa/scripts/exa.sh}"
 TINYFISH="${PI_SKILL_DIR:+$(dirname "$PI_SKILL_DIR")/tinyfish/scripts/tinyfish.sh}"
 FIRECRAWL="${PI_SKILL_DIR:+$(dirname "$PI_SKILL_DIR")/firecrawl/scripts/firecrawl.sh}"
@@ -59,153 +29,141 @@ for root in "$HOME/.agents/skills" "$HOME/.local/share/tia/pi-agent/skills" "$HO
   [ -x "$ALPHAXIV" ] || ALPHAXIV="$root/research/scripts/alphaxiv.sh"
 done
 
+RESEARCH_DIR="${RESEARCH_ARTIFACT_DIR:-${TMPDIR:-/tmp}/claude-research-$(date +%Y%m%d-%H%M%S)-$$}"
+mkdir -p "$RESEARCH_DIR"
+
+echo "EXA=$EXA"; echo "TINYFISH=$TINYFISH"; echo "FIRECRAWL=$FIRECRAWL"; echo "ALPHAXIV=$ALPHAXIV"
+echo "RESEARCH_DIR=$RESEARCH_DIR"
 test -x "$EXA" && echo "exa: OK" || echo "exa: MISSING"
 test -x "$TINYFISH" && echo "tinyfish: OK" || echo "tinyfish: MISSING"
 test -x "$FIRECRAWL" && echo "firecrawl: OK" || echo "firecrawl: MISSING"
 test -x "$ALPHAXIV" && echo "alphaxiv: OK" || echo "alphaxiv: MISSING"
+[ -n "$EXA_API_KEY" ] && echo "EXA_API_KEY: set" || echo "EXA_API_KEY: MISSING"
+[ -n "$TINYFISH_API_KEY" ] && echo "TINYFISH_API_KEY: set" || echo "TINYFISH_API_KEY: MISSING"
+[ -n "$FIRECRAWL_API_KEY" ] && echo "FIRECRAWL_API_KEY: set" || echo "FIRECRAWL_API_KEY: MISSING"
 ```
 
-Also check env vars: `EXA_API_KEY`, `TINYFISH_API_KEY`, `FIRECRAWL_API_KEY`. If required tools/keys are missing, stop and tell the user exactly what to install/export.
+**Stop if any tool or key is MISSING.** Tell the user exactly what to install/export. Do not dispatch subagents.
 
-## Scope before search
+## 2. Scope — no tools, just thinking
 
-Do this in the parent, without tools. Better scope beats more queries.
+1. Rewrite the user's ask into one precise core question.
+2. Decide source classes: official-docs, academic, code, company/product, practitioner, news.
+3. Decide depth: quick scan (3-5 sources) or deep dive (10-20+ sources).
+4. Split into independent angles. For each angle, state what IS and IS NOT in scope to prevent overlap.
 
-1. Rewrite vague asks into one precise core question.
-2. Decide source classes: official docs/specs, academic, code, company/product, practitioner, news.
-3. Decide depth: quick scan (3-5 good sources) or deep dive (10-20+ sources).
-4. Split only into independent angles; if all angles would search the same query, use one subagent.
+Example: "AI code review tools" → 3 angles: (1) products and pricing — not technical internals, (2) technical approaches — not product features, (3) practitioner reception — not marketing claims.
 
-Examples:
-- "Research WebTransport" → "What is WebTransport's browser support, production adoption, and tradeoff vs WebSocket/SSE for real-time apps as of 2026?"
-- "Look into RAG" → "Which RAG chunking, embedding, reranking, and retrieval patterns currently improve recall/latency, and what evidence supports them?"
+**Do not proceed until you have a precise question and subagent split.**
 
-## Subagents are mandatory by default
+## 3. Dispatch subagents
 
-All target harnesses support delegation:
+Subagents are mandatory for 2+ angles. Use whatever subagent/agent/task tool the harness provides. Launch independent subagents in parallel when the harness supports it. If no subagent tool exists, run the chain yourself with reduced scope: 1-2 searches, top 3-5 sources, no raw page dumps.
 
-| Harness | Mechanism |
-|---|---|
-| Pi Agent | `subagent` |
-| Claude Code | `Agent` |
-| OpenCode | `Task` |
+Split by **angle**, not by tool:
+- Focused question → 1 subagent (return in-context is fine)
+- Multi-angle → 2-3 subagents (write to `$RESEARCH_DIR`)
+- Broad survey → 3-5 subagents (write to `$RESEARCH_DIR`)
+- Contradiction → 1 targeted gap-checker after first synthesis
 
-Use subagents because they improve source diversity, reduce anchoring, keep raw acquisition output out of the parent context, and allow parallel angles.
+### Subagent prompt contract
 
-Only skip subagents for trivial single-source lookups or if the harness truly lacks delegation. If there is no subagent tool, run the same chain in the parent with reduced scope: 1-2 searches, fetch/scrape only the top 3-5 sources, and avoid dumping raw page output into the final answer.
-
-### Split by angle, not by tool
-
-- Focused question → 1 subagent that searches + fetches + reports.
-- Multi-angle landscape → 2-3 subagents, e.g. products / technical approach / practitioner reception.
-- Broad survey → 3-5 subagents, each covering an independent source class or thesis.
-- Unresolved contradiction → 1 targeted gap-checker after first synthesis.
-
-Launch independent children together when the harness allows it. The parent must not redo delegated search; it should synthesize returned findings.
-
-### Subagent roles
-
-| Role | Job | Return |
-|---|---|---|
-| Discovery researcher | Search with Exa/TinyFish and follow similar trails | Ranked sources and rejected weak sources |
-| Deep reader | TinyFish fetch / Firecrawl Markdown scrape | Claims with exact quotes and source excerpts |
-| Specialist | One angle: docs, academic, market, code, news, practitioner | Compact angle findings |
-| Gap checker | Resolve one contradiction/missing source class | Targeted answer and confidence update |
-
-## Protocol
-
-1. **Scope:** core question, independent sub-questions, source classes, depth, artifact/filing target.
-2. **Plan chain:** choose search/fetch/Markdown/extraction tools per source class.
-3. **Dispatch subagents:** one focused prompt per independent angle; pass resolved tool paths and exact commands.
-4. **Deep read:** require top 3-5 authoritative URLs per angle, fetched/scraped content, and exact quotes.
-5. **Synthesize:** merge duplicate sources, weight primary/recent sources, compare contradictions, spawn one gap-checker if needed.
-6. **File:** final cited report plus correct wiki path when filing is requested.
-
-## Artifacts
-
-For substantial deep research, preserve a small evidence trail instead of only a chat answer:
-
-- Subagents return compact findings to the parent; they may also write a Markdown handoff when the harness supports artifacts.
-- Artifact contents: refined question, angle, commands run, ranked sources, exact quotes, contradictions, gaps. Do not dump full scraped pages unless explicitly requested.
-- Parent final report should cite sources and optionally link artifact paths. If the user requested wiki filing, ingest/file only the final report unless they ask for raw evidence notes too.
-
-## Subagent prompt template
-
-```text
+```
 You are one research subagent. Do not write the final report.
 
 CORE QUESTION: [overall question]
-YOUR ANGLE: [narrow independent angle]
-PATHS: Exa=[resolved absolute path], TinyFish=[resolved absolute path], Firecrawl=[resolved absolute path], AlphaXiv=[resolved absolute path]
-ARTIFACT: [optional artifact path or "none"]
+YOUR ANGLE: [narrow angle — what IS and IS NOT in scope]
 
-CHAIN:
-1. Search with: [resolved Exa path] search "[query]" 5 [category]
-2. Fetch top URLs with: [resolved TinyFish path] fetch "<url1>" "<url2>" --format markdown
-3. For docs/sites or cleaner Markdown: [resolved Firecrawl path] map "<root>" 50, then [resolved Firecrawl path] scrape "<url>" markdown
-4. For structured product/data fields only: [resolved Firecrawl path] extract "<url>" "<schema/prompt>"
-5. For arXiv/AlphaXiv papers only: [resolved AlphaXiv path] overview "<paper-id-or-url>"; for other papers fetch abstract/paper pages with TinyFish or Firecrawl
-6. Trail: [resolved Exa path] similar "<best-url>" 5
+TOOLS (invoke via the Bash tool with these literal paths):
+  bash [exa-path] search "<query>" <num> [category]
+  bash [exa-path] similar "<url>" <num>
+  bash [tinyfish-path] fetch "<url1>" "<url2>" --format markdown
+  bash [firecrawl-path] scrape "<url>" markdown
+  bash [firecrawl-path] map "<url>" <limit>
+  bash [firecrawl-path] extract "<url>" "<schema>"
+  bash [alphaxiv-path] overview "<paper-id>"
 
-RETURN ONLY:
+CHAIN (adapt order to your angle):
+1. Search: 1-2 Exa searches, 5-10 results each
+2. Fetch: TinyFish fetch top 3-5 URLs as markdown
+3. If docs site: Firecrawl map then scrape relevant pages
+4. If structured data needed: Firecrawl extract with schema
+5. If arXiv paper found: AlphaXiv overview by ID
+6. Trail (mandatory): Exa similar on best source
+
+OUTPUT: Write to [research-dir]/[angle-slug].md:
 ## Findings: [angle]
-### Answer
-- [5-10 compact bullets]
-### Key Claims
-- [claim] — [Title](URL) — quote: "[exact quote from fetched/scraped content]"
-### Contradictions
-- [conflict or None found]
-### Sources Ranked
-1. [Title](URL) — [official-docs|peer-reviewed|industry|blog|forum|code] — [why it matters]
-### Gaps
-- [missing evidence or None]
-### Follow-up
-- [one targeted query or None]
-### Artifact
-- [path written or None]
+### Answer — [5-10 bullets]
+### Key Claims — [claim] — [Title](URL) — quote: "[exact quote]"
+### Contradictions — [conflicts or None]
+### Sources — 1. [Title](URL) — [authority-tag] — [date] — [why it matters]
+### Gaps — [missing evidence or None]
 ```
 
-## Final report structure
+## 4. Synthesize
+
+Do not proceed until all subagents have returned.
+
+1. Read each file in `$RESEARCH_DIR/` (one per angle).
+2. Merge findings, dedupe sources by URL, weight by authority and recency. If two angles cite the same source with different takeaways, include both.
+3. Compare contradictions across angles — this becomes the Contradictions section.
+4. If a critical gap remains (a core sub-question with zero evidence), spawn one gap-checker. Do not retry the same search.
+5. Write the final report. Print `Research artifacts: $RESEARCH_DIR` at the end.
+
+## Tool chain
+
+| Stage | Tool | Use for | Not for |
+|---|---|---|---|
+| Search | **Exa** | Semantic discovery, similar trails, code/paper search | Fetching full content |
+| Fetch | **TinyFish** | Page content, JS-rendered pages, batch ≤10 URLs | Primary search (Exa is better) |
+| Scrape/crawl | **Firecrawl** | Known-URL markdown, docs maps, recursive crawl | `extract` is only for structured JSON |
+| Papers | **AlphaXiv** | arXiv/AlphaXiv paper overviews by ID | Non-arXiv URLs |
+
+Default chain: **Exa search → TinyFish fetch → Firecrawl scrape/map when needed → Exa similar → synthesize**.
+
+Provider snippets and `answer` summaries are never evidence. Evidence = fetched/scraped source content with exact quotes.
+
+## Report format
 
 ```markdown
 # Research: [Core Question]
 
 ## TL;DR
-[Direct answer under 100 words.]
+[Under 100 words. End: Confidence: High|Mixed|Low — [reason].]
 
 ## Key Findings
 ### [Theme]
-[Synthesis with citations like [1], [2].]
+[Synthesis with inline citations [1], [2].]
 
 ## Landscape / Comparison
 [Optional table.]
 
 ## Contradictions & Disputes
-[Mandatory: conflicts, or why sources agree.]
+[Mandatory. Never omit.]
 
 ## Open Questions
-[Known gaps.]
+[Gaps and what would resolve them.]
 
 ## Sources
-[1] [Title](URL) — [authority] — [one-line description]
+[1] [Title](URL) — [authority-tag] — [date] — [one-line]
 ```
 
-## Error handling
+Target 1000-3000 words depending on depth.
 
-| Problem | Action |
+## Error recovery
+
+| Problem | Do this |
 |---|---|
-| Preflight script/key missing | Stop before spawning subagents; tell user which skill/key is missing. |
-| Search returns weak/no results | Rephrase once, broaden terms, try another source class. |
-| TinyFish fetch fails | Try Firecrawl scrape once. |
-| Firecrawl scrape fails | Try TinyFish fetch once. |
-| Firecrawl extract returns JSON but you need prose | Use Firecrawl scrape `markdown` instead. |
-| Provider summary conflicts with source content | Trust source content; report conflict. |
-| Subagent result is thin | Spawn one targeted gap-checker, not a full retry. |
+| Search returns nothing | Rephrase once, broaden, try another source class |
+| TinyFish fails | Firecrawl scrape once |
+| Firecrawl fails | TinyFish fetch once |
+| Subagent thin | One gap-checker, not full retry |
+| Provider vs source conflict | Trust source, report conflict |
 
-## Token budget
+## Hard rules
 
-Keep this skill compact. Target under ~3k loaded tokens. Put command details in sibling skills (`exa`, `tinyfish`, `firecrawl`) and include only chain decisions, prompt contracts, report shape, and hard rules here.
-
-## Quality bar
-
-A good report answers the question, cites source content, uses primary sources, flags disagreements, admits gaps, avoids snippet-based claims, keeps acquisition output out of parent context, preserves useful evidence artifacts for deep work, and files under the right project/global research path.
+1. **Never ask permission** between searches. Scope → dispatch → synthesize → deliver.
+2. **Similar trail is mandatory.** Every subagent runs `exa similar` on its best source.
+3. **Primary sources first.** Official docs > blogs. Papers > news about papers.
+4. **Admit uncertainty.** Conflicting sources → report the conflict, don't pick silently.
+5. **Keep parent context clean.** Raw search/scrape output stays in subagent contexts or artifact files.
