@@ -80,8 +80,11 @@ TOOLS (invoke via the Bash tool with these literal paths):
   bash [tinyfish-path] fetch "<url1>" "<url2>" --format markdown
   bash [firecrawl-path] scrape "<url>" markdown
   bash [firecrawl-path] map "<url>" <limit>
-  bash [firecrawl-path] extract "<url>" "<schema>"
+  bash [firecrawl-path] extract "<url>" "<prompt>"
+  bash [firecrawl-path] crawl "<url>" <limit> <depth>
   bash [alphaxiv-path] overview "<paper-id>"
+  bash [alphaxiv-path] search "<query>" <num>
+  bash [exa-path] code "<programming query>"
 
 CHAIN (adapt order to your angle):
 1. Search: 1-2 Exa searches, 5-10 results each
@@ -94,10 +97,16 @@ CHAIN (adapt order to your angle):
 OUTPUT: Write to [research-dir]/[angle-slug].md:
 ## Findings: [angle]
 ### Answer — [5-10 bullets]
-### Key Claims — [claim] — [Title](URL) — quote: "[exact quote]"
+### Key Claims — [claim] — [Title](URL) — quote: "[15+ word verbatim quote from fetched content]"
 ### Contradictions — [conflicts or None]
-### Sources — 1. [Title](URL) — [authority-tag] — [date] — [why it matters]
+### Sources — 1. [Title](URL) — [tag] — [YYYY-MM or Unknown] — [one-line]
+  Tags: Primary | Academic | Official-docs | Vendor | News | Blog | Forum
 ### Gaps — [missing evidence or None]
+
+QUALITY RULES:
+- Only cite URLs you actually fetched/scraped. Never cite raw search-result URLs.
+- For "current/latest/2026" queries, include the year in search queries and prefer sources <18 months old.
+- For code/framework angles, use exa code. For academic angles, use alphaxiv search.
 ```
 
 ## 4. Synthesize
@@ -105,7 +114,7 @@ OUTPUT: Write to [research-dir]/[angle-slug].md:
 Do not proceed until all subagents have returned.
 
 1. Read each file in `$RESEARCH_DIR/` (one per angle).
-2. Merge findings, dedupe sources by URL, weight by authority and recency. If two angles cite the same source with different takeaways, include both.
+2. Merge findings, dedupe sources by URL, weight by authority (Primary > Academic > Official-docs > Vendor > Blog > Forum) and recency. If two angles cite the same source with different takeaways, include both.
 3. Compare contradictions across angles — this becomes the Contradictions section.
 4. If a critical gap remains (a core sub-question with zero evidence), spawn one gap-checker. Do not retry the same search.
 5. Write the final report. Print `Research artifacts: $RESEARCH_DIR` at the end.
@@ -116,7 +125,7 @@ Do not proceed until all subagents have returned.
 |---|---|---|---|
 | Search | **Exa** | Semantic discovery, similar trails, code/paper search | Fetching full content |
 | Fetch | **TinyFish** | Page content, JS-rendered pages, batch ≤10 URLs | Primary search (Exa is better) |
-| Scrape/crawl | **Firecrawl** | Known-URL markdown, docs maps, recursive crawl | `extract` is only for structured JSON |
+| Scrape/crawl | **Firecrawl** | Known-URL markdown, docs maps, recursive crawl | `extract` takes a prompt, returns structured JSON |
 | Papers | **AlphaXiv** | arXiv/AlphaXiv paper overviews by ID | Non-arXiv URLs |
 
 Default chain: **Exa search → TinyFish fetch → Firecrawl scrape/map when needed → Exa similar → synthesize**.
@@ -129,7 +138,7 @@ Provider snippets and `answer` summaries are never evidence. Evidence = fetched/
 # Research: [Core Question]
 
 ## TL;DR
-[Under 100 words. End: Confidence: High|Mixed|Low — [reason].]
+[Under 100 words. End: Confidence: High (sources agree, primary evidence) | Mixed (conflicts or thin coverage) | Low (few sources, mostly secondary) — [reason].]
 
 ## Key Findings
 ### [Theme]

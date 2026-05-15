@@ -1,4 +1,4 @@
-# Autonomous Research Skill
+# Deep Research Skill
 
 Deep research on any topic — fully autonomous. Combines [Exa](https://exa.ai) semantic search, [TinyFish](https://tinyfish.ai) web search/fetch, [Firecrawl](https://firecrawl.dev) Markdown scraping/crawling/extraction, and [AlphaXiv](https://alphaxiv.org) paper analysis into structured cited reports.
 
@@ -23,7 +23,7 @@ Install this skill and its search/fetch/scrape dependencies:
 npx skills add edxeth/superlight-exa-skill
 npx skills add edxeth/superlight-tinyfish-skill
 npx skills add edxeth/superlight-firecrawl-skill
-npx skills add FasalZein/autonomous-research-skill
+npx skills add FasalZein/deep-research-skill
 ```
 
 After restarting your session, the `/research` command is available.
@@ -31,7 +31,7 @@ After restarting your session, the `/research` command is available.
 ### Manual Install
 
 ```bash
-git clone https://github.com/FasalZein/autonomous-research-skill.git ~/.claude/skills/research
+git clone https://github.com/FasalZein/deep-research-skill.git ~/.claude/skills/research
 git clone https://github.com/edxeth/superlight-exa-skill.git ~/.claude/skills/exa
 git clone https://github.com/edxeth/superlight-tinyfish-skill.git ~/.claude/skills/tinyfish
 git clone https://github.com/edxeth/superlight-firecrawl-skill.git ~/.claude/skills/firecrawl
@@ -138,7 +138,7 @@ Every report includes:
 ## File Structure
 
 ```text
-autonomous-research-skill/
+deep-research-skill/
 └── skills/
     └── research/
         ├── SKILL.md              # Complete research protocol
@@ -161,11 +161,15 @@ Script path guidance supports common skill locations:
 
 Works on macOS, Linux, and Windows via WSL.
 
-## Related Skills
+## Dependency Skills
 
-- Exa semantic search
-- TinyFish web search/fetch
-- Firecrawl scraping/crawling/extraction
+This skill chains three superlight skills by [@edxeth](https://github.com/edxeth). Install them before using `/research`:
+
+| Skill | Install | What it does |
+|-------|---------|-------------|
+| [Exa](https://github.com/edxeth/superlight-exa-skill) | `npx skills add edxeth/superlight-exa-skill` | Neural semantic search, similar-page trails, code/paper discovery |
+| [TinyFish](https://github.com/edxeth/superlight-tinyfish-skill) | `npx skills add edxeth/superlight-tinyfish-skill` | Web fetch, JS-rendered pages, batch URL extraction to clean Markdown |
+| [Firecrawl](https://github.com/edxeth/superlight-firecrawl-skill) | `npx skills add edxeth/superlight-firecrawl-skill` | URL scraping, docs site maps, recursive crawl, structured JSON extraction |
 
 ## License
 
