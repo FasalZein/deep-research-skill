@@ -1,30 +1,28 @@
 # Autonomous Research Skill
 
-Deep research on any topic — fully autonomous. Combines [Exa](https://exa.ai) semantic search, [Firecrawl](https://firecrawl.dev) web scraping, and [AlphaXiv](https://alphaxiv.org) paper analysis into a single research workflow that produces structured reports with citations.
+Deep research on any topic — fully autonomous. Combines [Exa](https://exa.ai) semantic search, [TinyFish](https://tinyfish.ai) web search/fetch, [Firecrawl](https://firecrawl.dev) Markdown scraping/crawling/extraction, and [AlphaXiv](https://alphaxiv.org) paper analysis into structured cited reports.
 
-Uses **subagent delegation** to keep the main context clean — all search/scrape output stays in subagent contexts, only compact findings return to the main model for synthesis.
+Uses **subagent delegation** to keep the main context clean: subagents do search/fetch/scrape work and return compact findings, while the main model scopes, verifies, and synthesizes.
 
-Built on top of the excellent [superlight-exa-skill](https://github.com/edxeth/superlight-exa-skill) and [superlight-firecrawl-skill](https://github.com/edxeth/superlight-firecrawl-skill) by [@edxeth](https://github.com/edxeth).
+Built on top of the excellent Exa, TinyFish, and Firecrawl superlight skills by [@edxeth](https://github.com/edxeth).
 
 ## Supported Harnesses
 
 | Harness | Subagent Tool | Status |
 |---------|--------------|--------|
-| **Claude Code** | `Agent` tool (built-in) | Full support |
-| **Pi Agent** | `subagent` tool (via pi-interactive-subagents) | Full support |
-| **OpenCode** | `Task` tool (built-in) | Full support |
-| **Others** | Fallback: direct execution with reduced scope | Works, no context isolation |
+| **Claude Code** | `Agent` tool | Full support |
+| **Pi Agent** | `subagent` tool | Full support |
+| **OpenCode** | `Task` tool | Full support |
+| **Others** | Direct execution fallback | Works, no context isolation |
 
 ## Install
 
-Install all three skills (this skill + its two dependencies):
+Install this skill and its search/fetch/scrape dependencies:
 
 ```bash
-# 1. Install the search and scraping skills (by edxeth)
 npx skills add edxeth/superlight-exa-skill
+npx skills add edxeth/superlight-tinyfish-skill
 npx skills add edxeth/superlight-firecrawl-skill
-
-# 2. Install this research skill
 npx skills add FasalZein/autonomous-research-skill
 ```
 
@@ -32,86 +30,87 @@ After restarting your session, the `/research` command is available.
 
 ### Manual Install
 
-If you prefer to install manually (or use a different coding harness):
-
 ```bash
-# Clone into your skills directory
 git clone https://github.com/FasalZein/autonomous-research-skill.git ~/.claude/skills/research
-
-# Also install the dependencies
 git clone https://github.com/edxeth/superlight-exa-skill.git ~/.claude/skills/exa
+git clone https://github.com/edxeth/superlight-tinyfish-skill.git ~/.claude/skills/tinyfish
 git clone https://github.com/edxeth/superlight-firecrawl-skill.git ~/.claude/skills/firecrawl
 ```
 
 ## Environment Variables
 
-You need API keys for Exa and Firecrawl. AlphaXiv is free and requires no key.
+You need API keys for Exa, TinyFish, and Firecrawl. AlphaXiv requires no key.
 
 ```bash
-# Add to your shell profile (~/.zshrc, ~/.bashrc, etc.)
-export EXA_API_KEY="your-key"          # Get at: https://dashboard.exa.ai/api-keys
-export FIRECRAWL_API_KEY="fc-your-key" # Get at: https://firecrawl.dev
+export EXA_API_KEY="your-key"              # https://dashboard.exa.ai/api-keys
+export TINYFISH_API_KEY="your-key"         # https://agent.tinyfish.ai/api-keys
+export FIRECRAWL_API_KEY="fc-your-key"     # https://firecrawl.dev
 
-# Both support comma-separated keys for automatic rotation on rate limits:
+# All support comma-separated keys for rotation where the underlying skill supports it:
 export EXA_API_KEY="key1,key2,key3"
+export TINYFISH_API_KEY="key1,key2,key3"
 export FIRECRAWL_API_KEY="fc-key1,fc-key2"
 ```
 
 ## Usage
 
-```
+```text
 /research <topic>
 ```
 
 Examples:
-```
+
+```text
 /research the current state of Elliott Wave analysis algorithms
 /research what's the landscape of AI code review tools in 2026
 /research deep dive into WebSocket vs SSE for real-time data streaming
-/research how does Raft consensus work
+/research how does Raft consensus handle leader election
 ```
 
-The skill runs fully autonomously — no stopping to ask questions mid-research.
+The skill runs autonomously: it scopes the question, launches subagents when useful, chains tools, verifies contradictions, and returns a cited report.
 
 ## How It Works
 
 ### Architecture: Subagent-Delegated Research
 
-The main model never runs search or scraping tools directly. It scopes the research, spawns subagents equipped with the exa/firecrawl/alphaxiv tools to do the actual searching and reading, then synthesizes their compact findings into the final report.
+The main model is the research director. It scopes/refines the question, resolves tool paths once, spawns subagents for independent angles, and synthesizes only compact findings.
 
-```
-Main Model (director — scopes, delegates, synthesizes)
-│
-├─ Phase 1: Scope (main model, no tools)
-│   Define core question, sub-questions, source types, depth
-│
-├─ Phase 2+3: Research subagents (parallel, tool-equipped)
-│   ├─ Subagent A → searches + scrapes sub-question 1 → returns compact findings
-│   ├─ Subagent B → searches + scrapes sub-question 2 → returns compact findings
-│   └─ Subagent C → searches + scrapes sub-question 3 → returns compact findings
-│   (all raw search/scrape output stays in subagent contexts — never enters main)
-│
-├─ Phase 4: Synthesize (main model — clean context, only compact findings)
-│
-└─ Phase 5: Verify claims (cross-check contradictions, recency, authority, gaps)
+```text
+Main Model (director)
+├─ Scope/refine the question and source classes
+├─ Preflight: resolve Exa/TinyFish/Firecrawl/AlphaXiv paths + API keys
+├─ Subagents: search, fetch, scrape, crawl, deep-read sources
+├─ Synthesis: merge findings, dedupe sources, weight authority/recency
+└─ Verify: contradictions, gaps, and final cited report
 ```
 
-**Why subagents?** A typical research session generates 75K+ characters of raw search results and scraped pages. Without subagents, this fills the main context window, leaving no room for quality synthesis. With subagents, the main model only sees ~2K characters of structured findings per sub-question.
+Why subagents? Deep research creates lots of raw search and page content. Delegation keeps that raw output out of the main context so the final synthesis has room to think.
 
-### Tools Available to Subagents
+### Tool Chain
 
-| Tool | Command | Best For |
-|------|---------|----------|
-| Exa search | `$EXA search "<query>" <n> [category]` | General discovery |
-| Exa answer | `$EXA answer "<question>"` | Quick factual overview |
-| Exa similar | `$EXA similar "<url>" <n>` | Trail-following from best source |
-| Exa code | `$EXA code "<query>"` | Code and implementations |
-| Firecrawl scrape | `$FIRECRAWL scrape "<url>"` | Full page content |
-| Firecrawl search | `$FIRECRAWL search "<query>" <n>` | Web search + scrape combo |
-| Firecrawl extract | `$FIRECRAWL extract "<url>" "<prompt>"` | Structured JSON extraction |
-| Firecrawl map | `$FIRECRAWL map "<url>" <n>` | URL discovery on docs sites |
-| AlphaXiv overview | `$ALPHAXIV overview "<paper-id>"` | Arxiv paper summaries |
-| AlphaXiv search | `$ALPHAXIV search "<query>" <n>` | Academic paper search |
+| Stage | Tool | Best For |
+|------|------|----------|
+| Search/discovery | Exa | Semantic discovery, authoritative sources, similar-page trails, code/paper search |
+| Fetch/extract content | TinyFish | Broad web fetch, JS-rendered pages, batching URLs into clean Markdown |
+| Markdown/crawl/map | Firecrawl | Known URL scraping, docs/site maps, recursive crawl, structured JSON extraction |
+| Papers | AlphaXiv + Exa | Arxiv discovery and paper overviews |
+
+Default flow: **Exa search → TinyFish fetch top URLs → Firecrawl map/scrape/crawl when needed → Exa similar trail → synthesize**.
+
+### How Many Subagents?
+
+Do not always split into three.
+
+- **Focused question** → 1 subagent.
+- **Multi-angle landscape** → 2-3 subagents, one per independent angle.
+- **Broad survey** → 3-5 subagents, one per source class or thesis.
+- **Unresolved contradiction** → 1 targeted gap-checker.
+
+Split by independent angle, not by tool.
+
+### Direct Execution Fallback
+
+If a harness has no subagent tool, run the same chain in the main context with reduced scope: use 1-2 focused searches, fetch/scrape only the top 3-5 sources, summarize evidence as you go, and avoid pasting raw page output into the final report.
 
 ### Report Output
 
@@ -119,16 +118,16 @@ Every report includes:
 
 | Section | Description |
 |---------|-------------|
-| **TL;DR** | <100 word executive summary |
-| **Key Findings** | Per sub-question with inline citations `[1]`, `[2]` |
-| **Landscape / Comparison** | Table comparing approaches, tools, or methods |
-| **Contradictions & Disputes** | Explicit disagreements between sources (mandatory) |
-| **Open Questions** | What remains unclear or contested |
-| **Sources** | Numbered, authority-tagged (`official-docs`, `peer-reviewed`, `industry`, `blog`, `code`) |
+| **TL;DR** | Direct answer under 100 words |
+| **Key Findings** | Synthesized themes with inline citations `[1]`, `[2]` |
+| **Landscape / Comparison** | Optional table comparing approaches/tools/methods |
+| **Contradictions & Disputes** | Mandatory conflicts/consensus section |
+| **Open Questions** | Known gaps |
+| **Sources** | Numbered, authority-tagged sources |
 
 ## File Structure
 
-```
+```text
 autonomous-research-skill/
 └── skills/
     └── research/
@@ -137,23 +136,26 @@ autonomous-research-skill/
             └── alphaxiv.sh       # AlphaXiv paper lookup (no API key needed)
 
 Dependencies (installed separately):
-├── edxeth/superlight-exa-skill       # Exa semantic search
-│   └── scripts/exa.sh
-└── edxeth/superlight-firecrawl-skill # Firecrawl web scraping
-    └── scripts/firecrawl.sh
+├── exa/scripts/exa.sh
+├── tinyfish/scripts/tinyfish.sh
+└── firecrawl/scripts/firecrawl.sh
 ```
 
 ## OS Compatibility
 
-All script paths use auto-detection with `~/.claude/skills/` fallback. Works on:
-- macOS
-- Linux
-- Windows (WSL)
+Script path guidance supports common skill locations:
+
+- `~/.agents/skills/`
+- `~/.claude/skills/`
+- Pi agent skill installs where `PI_SKILL_DIR` is available
+
+Works on macOS, Linux, and Windows via WSL.
 
 ## Related Skills
 
-- [superlight-exa-skill](https://github.com/edxeth/superlight-exa-skill) — Exa AI semantic web search (by [@edxeth](https://github.com/edxeth))
-- [superlight-firecrawl-skill](https://github.com/edxeth/superlight-firecrawl-skill) — Firecrawl web scraping and crawling (by [@edxeth](https://github.com/edxeth))
+- Exa semantic search
+- TinyFish web search/fetch
+- Firecrawl scraping/crawling/extraction
 
 ## License
 

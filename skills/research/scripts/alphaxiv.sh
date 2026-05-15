@@ -127,9 +127,17 @@ cmd_search() {
     skills_dir="$(dirname "$(dirname "$script_dir")")"
     local exa_script="$skills_dir/exa/scripts/exa.sh"
 
-    # Fallback: try home directory convention
+    # Fallback: try common skill install locations
     if [[ ! -x "$exa_script" ]]; then
-        exa_script="${HOME}/.claude/skills/exa/scripts/exa.sh"
+        for candidate in \
+            "${HOME}/.agents/skills/exa/scripts/exa.sh" \
+            "${HOME}/.local/share/tia/pi-agent/skills/exa/scripts/exa.sh" \
+            "${HOME}/.claude/skills/exa/scripts/exa.sh"; do
+            if [[ -x "$candidate" ]]; then
+                exa_script="$candidate"
+                break
+            fi
+        done
     fi
 
     if [[ -x "$exa_script" ]]; then
@@ -137,6 +145,8 @@ cmd_search() {
     else
         echo "ERROR: Exa script not found. Searched:" >&2
         echo "  - $skills_dir/exa/scripts/exa.sh" >&2
+        echo "  - ${HOME}/.agents/skills/exa/scripts/exa.sh" >&2
+        echo "  - ${HOME}/.local/share/tia/pi-agent/skills/exa/scripts/exa.sh" >&2
         echo "  - ${HOME}/.claude/skills/exa/scripts/exa.sh" >&2
         exit 1
     fi
