@@ -29,7 +29,7 @@ for root in "$HOME/.agents/skills" "$HOME/.local/share/tia/pi-agent/skills" "$HO
   [ -x "$ALPHAXIV" ] || ALPHAXIV="$root/research/scripts/alphaxiv.sh"
 done
 
-RESEARCH_DIR="${RESEARCH_ARTIFACT_DIR:-${TMPDIR:-/tmp}/claude-research-$(date +%Y%m%d-%H%M%S)-$$}"
+RESEARCH_DIR="${RESEARCH_ARTIFACT_DIR:-$HOME/.cache/research/$(date +%Y%m%d-%H%M%S)}"
 mkdir -p "$RESEARCH_DIR"
 
 echo "EXA=$EXA"; echo "TINYFISH=$TINYFISH"; echo "FIRECRAWL=$FIRECRAWL"; echo "ALPHAXIV=$ALPHAXIV"
@@ -88,9 +88,9 @@ TOOLS (invoke via the Bash tool with these literal paths):
 
 CHAIN (adapt order to your angle):
 1. Search: 1-2 Exa searches, 5-10 results each
-2. Fetch: TinyFish fetch top 3-5 URLs as markdown
-3. If docs site: Firecrawl map then scrape relevant pages
-4. If structured data needed: Firecrawl extract with schema
+2. Fetch: TinyFish fetch top 3-5 URLs as markdown (use TinyFish for general page fetching, not Firecrawl — TinyFish handles JS-rendered pages and batches better)
+3. If docs site: Firecrawl map then scrape relevant pages (Firecrawl is for known-URL scraping, site maps, and recursive crawls — not general fetching)
+4. If structured data needed: Firecrawl extract with prompt
 5. If arXiv paper found: AlphaXiv overview by ID
 6. Trail (mandatory): Exa similar on best source
 
