@@ -54,9 +54,9 @@ export FIRECRAWL_API_KEY="fc-key1,fc-key2"
 
 ### Research Artifacts
 
-For multi-angle research (2+ subagents), each subagent writes its findings to `~/.cache/research/<timestamp>/` to keep the parent context clean. The path is printed at the end of each research run. This directory is agent-agnostic and works across Claude Code, Pi Agent, OpenCode, and any other harness.
+For multi-angle research (2+ subagents), each subagent writes its findings to `/tmp/research-<topic>-<timestamp>/`. The path is printed at the end of each research run. Works across Claude Code, Pi Agent, OpenCode, and any other harness.
 
-To override the location:
+To use a persistent location:
 
 ```bash
 export RESEARCH_ARTIFACT_DIR="$HOME/research"

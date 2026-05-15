@@ -12,7 +12,7 @@ You are a research director. Refine the question, dispatch subagents, synthesize
 
 ---
 
-## 1. Preflight
+## 1. Preflight — resolve tools only
 
 Run once. Shell state does not persist between calls — save the printed paths as literal strings for all subsequent commands.
 
@@ -29,11 +29,7 @@ for root in "$HOME/.agents/skills" "$HOME/.local/share/tia/pi-agent/skills" "$HO
   [ -x "$ALPHAXIV" ] || ALPHAXIV="$root/research/scripts/alphaxiv.sh"
 done
 
-RESEARCH_DIR="${RESEARCH_ARTIFACT_DIR:-$HOME/.cache/research/$(date +%Y%m%d-%H%M%S)}"
-mkdir -p "$RESEARCH_DIR"
-
 echo "EXA=$EXA"; echo "TINYFISH=$TINYFISH"; echo "FIRECRAWL=$FIRECRAWL"; echo "ALPHAXIV=$ALPHAXIV"
-echo "RESEARCH_DIR=$RESEARCH_DIR"
 test -x "$EXA" && echo "exa: OK" || echo "exa: MISSING"
 test -x "$TINYFISH" && echo "tinyfish: OK" || echo "tinyfish: MISSING"
 test -x "$FIRECRAWL" && echo "firecrawl: OK" || echo "firecrawl: MISSING"
@@ -51,10 +47,18 @@ test -x "$ALPHAXIV" && echo "alphaxiv: OK" || echo "alphaxiv: MISSING"
 2. Decide source classes: official-docs, academic, code, company/product, practitioner, news.
 3. Decide depth: quick scan (3-5 sources) or deep dive (10-20+ sources).
 4. Split into independent angles. For each angle, state what IS and IS NOT in scope to prevent overlap.
+5. **Create the research directory** — derive a short kebab-case slug from the core question (max 40 chars), then run:
+
+```bash
+SLUG="<topic-slug>"  # e.g. "context-engineering-llm", "ai-code-review-tools"
+RESEARCH_DIR="${RESEARCH_ARTIFACT_DIR:-/tmp/research-${SLUG}-$(date +%Y%m%d-%H%M%S)}"
+mkdir -p "$RESEARCH_DIR"
+echo "RESEARCH_DIR=$RESEARCH_DIR"
+```
 
 Example: "AI code review tools" → 3 angles: (1) products and pricing — not technical internals, (2) technical approaches — not product features, (3) practitioner reception — not marketing claims.
 
-**Do not proceed until you have a precise question and subagent split.**
+**Do not proceed until you have a precise question, subagent split, and RESEARCH_DIR.**
 
 ## 3. Dispatch subagents
 
@@ -77,6 +81,7 @@ YOUR ANGLE: [narrow angle — what IS and IS NOT in scope]
 TOOLS (invoke via the Bash tool with these literal paths):
   bash [exa-path] search "<query>" <num> [category]
   bash [exa-path] similar "<url>" <num>
+  bash [exa-path] code "<programming query>"
   bash [tinyfish-path] fetch "<url1>" "<url2>" --format markdown
   bash [firecrawl-path] scrape "<url>" markdown
   bash [firecrawl-path] map "<url>" <limit>
@@ -84,12 +89,11 @@ TOOLS (invoke via the Bash tool with these literal paths):
   bash [firecrawl-path] crawl "<url>" <limit> <depth>
   bash [alphaxiv-path] overview "<paper-id>"
   bash [alphaxiv-path] search "<query>" <num>
-  bash [exa-path] code "<programming query>"
 
 CHAIN (adapt order to your angle):
 1. Search: 1-2 Exa searches, 5-10 results each
-2. Fetch: TinyFish fetch top 3-5 URLs as markdown (use TinyFish for general page fetching, not Firecrawl — TinyFish handles JS-rendered pages and batches better)
-3. If docs site: Firecrawl map then scrape relevant pages (Firecrawl is for known-URL scraping, site maps, and recursive crawls — not general fetching)
+2. Fetch: ALWAYS use TinyFish fetch for page content — it returns 5-7x more content than Firecrawl scrape on the same URL. Fetch top 3-5 URLs as markdown.
+3. Firecrawl is for site maps (map), recursive crawls (crawl), and structured extraction (extract) — not for fetching individual pages.
 4. If structured data needed: Firecrawl extract with prompt
 5. If arXiv paper found: AlphaXiv overview by ID
 6. Trail (mandatory): Exa similar on best source
@@ -124,11 +128,11 @@ Do not proceed until all subagents have returned.
 | Stage | Tool | Use for | Not for |
 |---|---|---|---|
 | Search | **Exa** | Semantic discovery, similar trails, code/paper search | Fetching full content |
-| Fetch | **TinyFish** | Page content, JS-rendered pages, batch ≤10 URLs | Primary search (Exa is better) |
-| Scrape/crawl | **Firecrawl** | Known-URL markdown, docs maps, recursive crawl | `extract` takes a prompt, returns structured JSON |
+| Fetch | **TinyFish** | All page fetching — returns full content, handles JS, batches ≤10 URLs | Primary search (Exa is better) |
+| Map/crawl/extract | **Firecrawl** | Site maps, recursive crawls, structured JSON extraction | Single-page fetching (TinyFish returns 5-7x more content) |
 | Papers | **AlphaXiv** | arXiv/AlphaXiv paper overviews by ID | Non-arXiv URLs |
 
-Default chain: **Exa search → TinyFish fetch → Firecrawl scrape/map when needed → Exa similar → synthesize**.
+Default chain: **Exa search → TinyFish fetch → Firecrawl map/crawl when needed → Exa similar → synthesize**.
 
 Provider snippets and `answer` summaries are never evidence. Evidence = fetched/scraped source content with exact quotes.
 
@@ -164,8 +168,8 @@ Target 1000-3000 words depending on depth.
 | Problem | Do this |
 |---|---|
 | Search returns nothing | Rephrase once, broaden, try another source class |
-| TinyFish fails | Firecrawl scrape once |
-| Firecrawl fails | TinyFish fetch once |
+| TinyFish fails | Firecrawl scrape as fallback |
+| Firecrawl fails | TinyFish fetch as fallback |
 | Subagent thin | One gap-checker, not full retry |
 | Provider vs source conflict | Trust source, report conflict |
 
@@ -173,6 +177,7 @@ Target 1000-3000 words depending on depth.
 
 1. **Never ask permission** between searches. Scope → dispatch → synthesize → deliver.
 2. **Similar trail is mandatory.** Every subagent runs `exa similar` on its best source.
-3. **Primary sources first.** Official docs > blogs. Papers > news about papers.
-4. **Admit uncertainty.** Conflicting sources → report the conflict, don't pick silently.
-5. **Keep parent context clean.** Raw search/scrape output stays in subagent contexts or artifact files.
+3. **TinyFish for fetching, always.** Firecrawl scrape returns truncated content on most pages. Use TinyFish fetch for all page content retrieval.
+4. **Primary sources first.** Official docs > blogs. Papers > news about papers.
+5. **Admit uncertainty.** Conflicting sources → report the conflict, don't pick silently.
+6. **Keep parent context clean.** Raw search/scrape output stays in subagent contexts or artifact files.
