@@ -79,11 +79,13 @@ CORE QUESTION: [overall question]
 YOUR ANGLE: [narrow angle — what IS and IS NOT in scope]
 
 TOOLS (invoke via the Bash tool with these literal paths):
-  bash [exa-path] search "<query>" <num> [category]
+  bash [exa-path] search "<query>" <num> [category] [--start-date ISO] [--type deep-reasoning]
   bash [exa-path] similar "<url>" <num>
+  bash [exa-path] contents "<url>" [--highlights] [--summary]
   bash [exa-path] code "<programming query>"
   bash [tinyfish-path] fetch "<url1>" "<url2>" --format markdown
-  bash [firecrawl-path] scrape "<url>" markdown
+  bash [firecrawl-path] scrape "<url>" markdown ['{"waitFor":3000}']
+  bash [firecrawl-path] batch-scrape '["<url1>","<url2>"]' markdown
   bash [firecrawl-path] map "<url>" <limit>
   bash [firecrawl-path] extract "<url>" "<prompt>"
   bash [firecrawl-path] crawl "<url>" <limit> <depth>
@@ -91,9 +93,9 @@ TOOLS (invoke via the Bash tool with these literal paths):
   bash [alphaxiv-path] search "<query>" <num>
 
 CHAIN (adapt order to your angle):
-1. Search: 1-2 Exa searches, 5-10 results each
-2. Fetch: ALWAYS use TinyFish fetch for page content — it returns 5-7x more content than Firecrawl scrape on the same URL. Fetch top 3-5 URLs as markdown.
-3. Firecrawl is for site maps (map), recursive crawls (crawl), and structured extraction (extract) — not for fetching individual pages.
+1. Search: 1-2 Exa searches, 5-10 results each. For "latest/current/2026" queries, add --start-date. Exa returns highlights and published dates by default.
+2. Fetch: ALWAYS use TinyFish fetch for page content — it returns 5-7x more content than Firecrawl scrape. Fetch top 3-5 URLs as markdown. It also returns author and published_date metadata.
+3. Firecrawl is for site maps (map), batch-scrape (multiple URLs in parallel), recursive crawls (crawl), and structured extraction (extract). Use batch-scrape when you need 5+ URLs from a docs site after mapping.
 4. If structured data needed: Firecrawl extract with prompt
 5. If arXiv paper found: AlphaXiv overview by ID
 6. Trail (mandatory): Exa similar on best source
@@ -129,7 +131,7 @@ Do not proceed until all subagents have returned.
 |---|---|---|---|
 | Search | **Exa** | Semantic discovery, similar trails, code/paper search | Fetching full content |
 | Fetch | **TinyFish** | All page fetching — returns full content, handles JS, batches ≤10 URLs | Primary search (Exa is better) |
-| Map/crawl/extract | **Firecrawl** | Site maps, recursive crawls, structured JSON extraction | Single-page fetching (TinyFish returns 5-7x more content) |
+| Map/crawl/extract | **Firecrawl** | Site maps, batch-scrape, recursive crawls, structured JSON extraction, PDFs | Single-page fetching (TinyFish returns more content for HTML) |
 | Papers | **AlphaXiv** | arXiv/AlphaXiv paper overviews by ID | Non-arXiv URLs |
 
 Default chain: **Exa search → TinyFish fetch → Firecrawl map/crawl when needed → Exa similar → synthesize**.
@@ -177,7 +179,7 @@ Target 1000-3000 words depending on depth.
 
 1. **Never ask permission** between searches. Scope → dispatch → synthesize → deliver.
 2. **Similar trail is mandatory.** Every subagent runs `exa similar` on its best source.
-3. **TinyFish for fetching, always.** Firecrawl scrape returns truncated content on most pages. Use TinyFish fetch for all page content retrieval.
+3. **TinyFish for fetching single pages.** TinyFish returns the most content for HTML pages. Use Firecrawl batch-scrape when you need 5+ URLs from one site, or for PDFs.
 4. **Primary sources first.** Official docs > blogs. Papers > news about papers.
 5. **Admit uncertainty.** Conflicting sources → report the conflict, don't pick silently.
 6. **Keep parent context clean.** Raw search/scrape output stays in subagent contexts or artifact files.
