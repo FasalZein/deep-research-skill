@@ -18,7 +18,7 @@ Run once. Shell state does not persist between calls — save the printed paths 
 
 ```bash
 # Scan common skill install roots to find this skill and its siblings
-for root in "$HOME/.agents/skills/research" "$HOME/.claude/skills/research" "$HOME/.local/share/tia/pi-agent/skills/research"; do
+for root in "$HOME/.pi/agent/skills/research" "$HOME/.agents/skills/research" "$HOME/.claude/skills/research"; do
   [ -f "$root/SKILL.md" ] && SKILL_ROOT="$root" && break
 done
 SKILLS_DIR="$(dirname "$SKILL_ROOT")"
