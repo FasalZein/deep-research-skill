@@ -16,16 +16,11 @@ You are a research director. Refine the question, dispatch subagents, synthesize
 
 Run once. Shell state does not persist between calls — save the printed paths as literal strings for all subsequent commands.
 
-The skill directory is provided by your harness. Look for "Base directory for this skill:" in your system prompt (Claude Code), or use `$PI_SKILL_DIR` (Pi Agent). Pass the correct value as SKILL_ROOT below:
-
 ```bash
-# Detect skill root: PI_SKILL_DIR (Pi) > base-directory from system prompt > search common roots
-SKILL_ROOT="${PI_SKILL_DIR:-}"
-if [ -z "$SKILL_ROOT" ]; then
-  for root in "$HOME/.agents/skills/research" "$HOME/.claude/skills/research" "$HOME/.local/share/tia/pi-agent/skills/research"; do
-    [ -f "$root/SKILL.md" ] && SKILL_ROOT="$root" && break
-  done
-fi
+# Scan common skill install roots to find this skill and its siblings
+for root in "$HOME/.agents/skills/research" "$HOME/.claude/skills/research" "$HOME/.local/share/tia/pi-agent/skills/research"; do
+  [ -f "$root/SKILL.md" ] && SKILL_ROOT="$root" && break
+done
 SKILLS_DIR="$(dirname "$SKILL_ROOT")"
 
 EXA="$SKILLS_DIR/exa/scripts/exa.sh"
