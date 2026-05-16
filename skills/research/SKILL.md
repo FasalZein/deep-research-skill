@@ -16,19 +16,24 @@ You are a research director. Refine the question, dispatch subagents, synthesize
 
 Run once. Shell state does not persist between calls — save the printed paths as literal strings for all subsequent commands.
 
+The skill directory is provided by your harness. Look for "Base directory for this skill:" in your system prompt (Claude Code), or use `$PI_SKILL_DIR` (Pi Agent). Pass the correct value as SKILL_ROOT below:
+
 ```bash
-EXA="${PI_SKILL_DIR:+$(dirname "$PI_SKILL_DIR")/exa/scripts/exa.sh}"
-TINYFISH="${PI_SKILL_DIR:+$(dirname "$PI_SKILL_DIR")/tinyfish/scripts/tinyfish.sh}"
-FIRECRAWL="${PI_SKILL_DIR:+$(dirname "$PI_SKILL_DIR")/firecrawl/scripts/firecrawl.sh}"
-ALPHAXIV="${PI_SKILL_DIR:-${skill_dir:-$HOME/.agents/skills/research}}/scripts/alphaxiv.sh"
+# Detect skill root: PI_SKILL_DIR (Pi) > base-directory from system prompt > search common roots
+SKILL_ROOT="${PI_SKILL_DIR:-}"
+if [ -z "$SKILL_ROOT" ]; then
+  for root in "$HOME/.agents/skills/research" "$HOME/.claude/skills/research" "$HOME/.local/share/tia/pi-agent/skills/research"; do
+    [ -f "$root/SKILL.md" ] && SKILL_ROOT="$root" && break
+  done
+fi
+SKILLS_DIR="$(dirname "$SKILL_ROOT")"
 
-for root in "$HOME/.agents/skills" "$HOME/.local/share/tia/pi-agent/skills" "$HOME/.claude/skills"; do
-  [ -x "$EXA" ] || EXA="$root/exa/scripts/exa.sh"
-  [ -x "$TINYFISH" ] || TINYFISH="$root/tinyfish/scripts/tinyfish.sh"
-  [ -x "$FIRECRAWL" ] || FIRECRAWL="$root/firecrawl/scripts/firecrawl.sh"
-  [ -x "$ALPHAXIV" ] || ALPHAXIV="$root/research/scripts/alphaxiv.sh"
-done
+EXA="$SKILLS_DIR/exa/scripts/exa.sh"
+TINYFISH="$SKILLS_DIR/tinyfish/scripts/tinyfish.sh"
+FIRECRAWL="$SKILLS_DIR/firecrawl/scripts/firecrawl.sh"
+ALPHAXIV="$SKILL_ROOT/scripts/alphaxiv.sh"
 
+echo "SKILLS_DIR=$SKILLS_DIR"
 echo "EXA=$EXA"; echo "TINYFISH=$TINYFISH"; echo "FIRECRAWL=$FIRECRAWL"; echo "ALPHAXIV=$ALPHAXIV"
 test -x "$EXA" && echo "exa: OK" || echo "exa: MISSING"
 test -x "$TINYFISH" && echo "tinyfish: OK" || echo "tinyfish: MISSING"
