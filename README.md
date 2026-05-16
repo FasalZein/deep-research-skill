@@ -6,6 +6,18 @@ Uses **subagent delegation** to keep the main context clean: subagents do search
 
 Built on top of the excellent Exa, TinyFish, and Firecrawl superlight skills by [@edxeth](https://github.com/edxeth).
 
+## Key Features
+
+- **Agent-agnostic** — Works across 55+ agents: Claude Code, Pi Agent, Codex, OpenCode, Cursor, Warp, Windsurf, and more
+- **Token-efficient triage** — Subagents read Exa highlights first, then fetch only the most relevant sources (saves ~50-70% of fetch calls)
+- **Multi-key rotation** — All dependency skills support comma-separated API keys with automatic rotation and retry
+- **Full content, no truncation** — TinyFish and Firecrawl return complete page content
+- **Batch processing** — Firecrawl batch-scrape for parallel URL processing, TinyFish batches up to 10 URLs per request
+- **PDF support** — Firecrawl handles PDFs natively (TinyFish cannot)
+- **Similar-page trails** — Every subagent runs `exa similar` on its best source to discover related content
+- **Date-filtered search** — Exa supports `--start-date` for recency-focused research
+- **Structured extraction** — Firecrawl `extract` returns structured JSON from any page
+
 ## Supported Harnesses
 
 | Harness | Subagent Tool | Status |
@@ -100,12 +112,12 @@ Why subagents? Deep research creates lots of raw search and page content. Delega
 
 | Stage | Tool | Best For |
 |------|------|----------|
-| Search/discovery | Exa | Semantic discovery, authoritative sources, similar-page trails, code/paper search |
-| Fetch/extract content | TinyFish | Broad web fetch, JS-rendered pages, batching URLs into clean Markdown |
-| Markdown/crawl/map | Firecrawl | Known URL scraping, docs/site maps, recursive crawl, structured JSON extraction |
-| Papers | AlphaXiv + Exa | Arxiv discovery and paper overviews |
+| Search/discovery | Exa | Semantic search, date-filtered discovery, similar-page trails, code/paper search, AI answers |
+| Fetch content | TinyFish | Full page content (5-7x more than alternatives), JS-rendered pages, batch ≤10 URLs, author/date metadata |
+| Map/crawl/extract | Firecrawl | Site URL discovery, batch-scrape (parallel), recursive crawl, structured JSON extraction, PDFs |
+| Papers | AlphaXiv + Exa | arXiv paper overviews and academic search |
 
-Default flow: **Exa search → TinyFish fetch top URLs → Firecrawl map/scrape/crawl when needed → Exa similar trail → synthesize**.
+Default flow: **Exa search → Triage highlights → TinyFish fetch top URLs → Firecrawl map/batch-scrape when needed → Exa similar trail → synthesize**.
 
 ### How Many Subagents?
 
@@ -167,9 +179,9 @@ This skill chains three superlight skills by [@edxeth](https://github.com/edxeth
 
 | Skill | Install | What it does |
 |-------|---------|-------------|
-| [Exa](https://github.com/edxeth/superlight-exa-skill) | `npx skills add edxeth/superlight-exa-skill` | Neural semantic search, similar-page trails, code/paper discovery |
-| [TinyFish](https://github.com/edxeth/superlight-tinyfish-skill) | `npx skills add edxeth/superlight-tinyfish-skill` | Web fetch, JS-rendered pages, batch URL extraction to clean Markdown |
-| [Firecrawl](https://github.com/edxeth/superlight-firecrawl-skill) | `npx skills add edxeth/superlight-firecrawl-skill` | URL scraping, docs site maps, recursive crawl, structured JSON extraction |
+| [Exa](https://github.com/edxeth/superlight-exa-skill) | `npx skills add edxeth/superlight-exa-skill` | Neural semantic search, date filters, similar trails, code/paper discovery, AI answers, multi-key rotation |
+| [TinyFish](https://github.com/edxeth/superlight-tinyfish-skill) | `npx skills add edxeth/superlight-tinyfish-skill` | Full page fetch (5-7x more content), JS rendering, batch ≤10 URLs, author/date metadata |
+| [Firecrawl](https://github.com/edxeth/superlight-firecrawl-skill) | `npx skills add edxeth/superlight-firecrawl-skill` | Batch-scrape, site maps, recursive crawl, structured JSON extraction, PDF parsing, anti-bot bypass |
 
 ## License
 
