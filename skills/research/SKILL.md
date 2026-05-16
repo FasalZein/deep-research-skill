@@ -1,6 +1,6 @@
 ---
 name: research
-description: "Autonomous deep research on any topic. Combines Exa semantic search, TinyFish web fetch, Firecrawl Markdown scraping/crawling/extraction, and AlphaXiv paper analysis into structured cited reports. Use when: research this, find out about, what's the latest on, deep dive into, investigate, analyze the landscape of, compare approaches to, literature review, state of the art, how does X work. Produces a structured research report with citations."
+description: "Autonomous deep research on any topic. Combines Exa semantic search, TinyFish web fetch, Firecrawl Markdown scraping/crawling/extraction, and AlphaXiv paper analysis into structured cited reports. Use when: research this, deep research, deep-research, find out about, what's the latest on, deep dive into, investigate, analyze the landscape of, compare approaches to, literature review, state of the art, how does X work. Produces a structured research report with citations."
 ---
 
 # Autonomous Research
