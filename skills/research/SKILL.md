@@ -99,11 +99,12 @@ TOOLS (invoke via the Bash tool with these literal paths):
 
 CHAIN (adapt order to your angle):
 1. Search: 1-2 Exa searches, 5-10 results each. For "latest/current/2026" queries, add --start-date. Exa returns highlights and published dates by default.
-2. Fetch: ALWAYS use TinyFish fetch for page content — it returns 5-7x more content than Firecrawl scrape. Fetch top 3-5 URLs as markdown. It also returns author and published_date metadata.
-3. Firecrawl is for site maps (map), batch-scrape (multiple URLs in parallel), recursive crawls (crawl), and structured extraction (extract). Use batch-scrape when you need 5+ URLs from a docs site after mapping.
-4. If structured data needed: Firecrawl extract with prompt
-5. If arXiv paper found: AlphaXiv overview by ID
-6. Trail (mandatory): Exa similar on best source
+2. Triage (mandatory): Read the highlights and dates from search results. Pick the top 3-5 most relevant URLs based on highlight quality and recency. Do NOT fetch every search result — only fetch URLs whose highlights show direct evidence for your angle.
+3. Fetch: Use TinyFish fetch for the triaged URLs — it returns 5-7x more content than Firecrawl scrape. It also returns author and published_date metadata.
+4. Firecrawl is for site maps (map), batch-scrape (5+ URLs from one domain after mapping), recursive crawls (crawl), structured extraction (extract), and PDFs. Use batch-scrape when you need many pages from a docs site.
+5. If structured data needed: Firecrawl extract with prompt
+6. If arXiv paper found: AlphaXiv overview by ID
+7. Trail (mandatory): Exa similar on best source
 
 OUTPUT: Write to [research-dir]/[angle-slug].md:
 ## Findings: [angle]
@@ -115,6 +116,7 @@ OUTPUT: Write to [research-dir]/[angle-slug].md:
 ### Gaps — [missing evidence or None]
 
 QUALITY RULES:
+- Triage before fetching. Use highlights to decide relevance — never bulk-fetch all search results.
 - Only cite URLs you actually fetched/scraped. Never cite raw search-result URLs.
 - For "current/latest/2026" queries, include the year in search queries and prefer sources <18 months old.
 - For code/framework angles, use exa code. For academic angles, use alphaxiv search.
